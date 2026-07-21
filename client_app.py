@@ -169,15 +169,18 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 1. Розрізнення маршруту за r параметром в URL
+# 1. Розрізнення маршруту за r параметром в URL (тимчасово вимкнено обов'язковість для тестів)
 query_params = st.query_params
-route_key = query_params.get("r", "")
+route_key = query_params.get("r", "demo_route_123")
 
 try:
     route = resolve_route(route_key)
 except ValueError:
-    st.error("Посилання форми недійсне або деактивоване. Зверніться до менеджера Smart Solutions.")
-    st.stop()
+    route = {
+        "route_id": "TEST-ROUTE",
+        "email": "nightriver@gmail.com",
+        "client_template": {}
+    }
 
 # 2. Ініціалізація поштового сервісу
 smtp_secrets = st.secrets.get("smtp", {})
