@@ -57,9 +57,13 @@ class BrevoMailProvider:
             "content-type": "application/json"
         }
         
+        # Розділяємо отримувачів по комі, якщо їх кілька
+        to_list = [email.strip() for email in msg["To"].split(",") if email.strip()]
+        to_payload = [{"email": email} for email in to_list]
+
         payload = {
             "sender": {"email": msg["From"]},
-            "to": [{"email": msg["To"]}],
+            "to": to_payload,
             "subject": msg["Subject"],
             "textContent": text_content,
             "attachment": attachments
