@@ -182,9 +182,13 @@ except ValueError:
 # 2. Ініціалізація поштового сервісу
 smtp_secrets = st.secrets.get("smtp", {})
 use_mock = smtp_secrets.get("use_mock", True)
+provider_type = smtp_secrets.get("provider", "")
 
-if use_mock:
+if use_mock or provider_type == "mock":
     provider = MockMailProvider(should_succeed=True)
+elif provider_type == "brevo" or (provider_type == "" and smtp_secrets.get("api_key")):
+    from core.mailer import BrevoMailProvider
+    provider = BrevoMailProvider(api_key=smtp_secrets.get("api_key", ""))
 else:
     provider = SMTPMailProvider(
         host=smtp_secrets.get("host", ""),
