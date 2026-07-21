@@ -1,0 +1,212 @@
+"""
+Головний вхідний файл застосунку Streamlit (client_app.py)
+Забезпечує UX клієнтської вебформи, маршрутизацію, валідацію, генерацію Excel у пам'яті
+та поштову відправку / fallback завантаження.
+"""
+
+from datetime import datetime, date
+from uuid import uuid4
+import streamlit as st
+
+from core.export import build_workbook
+from core.mailer import MockMailProvider, OutstaffingMailer, SMTPMailProvider
+from core.routes import resolve_route
+from core.security import normalize_phone, validate_iban, validate_ipn
+
+st.set_page_config(
+    page_title="Smart Solutions — Заявка на аутстаффінг",
+    page_icon="📋",
+    layout="centered",
+)
+
+# 1. Розрізнення маршруту за r параметром в URL
+query_params = st.query_params
+route_key = query_params.get("r", "")
+
+try:
+    route = resolve_route(route_key)
+except ValueError:
+    st.error("Посилання форми недійсне або деактивоване. Зверніться до менеджера Smart Solutions.")
+    st.stop()
+
+# 2. Ініціалізація поштового сервісу з урахуванням конфігурації секретів
+smtp_secrets = st.secrets.get("smtp", {})
+use_mock = smtp_secrets.get("use_mock", False)
+
+if use_mock:
+    provider = MockMailProvider(should_succeed=True)
+else:
+    provider = SMTPMailProvider(
+        host=smtp_secrets.get("host", ""),
+        port=int(smtp_secrets.get("port", 587)),
+        username=smtp_secrets.get("username", ""),
+        password=smtp_secrets.get("password", ""),
+        use_tls=bool(smtp_secrets.get("use_tls", True)),
+    )
+
+mailer = OutstaffingMailer(
+    provider=provider,
+    from_addr=smtp_secrets.get("from_addr", "notifications@smart-solutions.ua"),
+)
+
+# 3. Антиспам rate-limit у session_state (максимум 5 спроб на сесію)
+if "submit_count" not in st.session_state:
+    st.session_state["submit_count"] = 0
+
+# Інтерфейс форми
+st.title("📋 Заявка на оформлення співробітника (Аутстаффінг)")
+st.caption("Smart Solutions — Автоматизований первинний збір даних")
+
+if st.session_state["submit_count"] >= 5:
+    st.warning("Перевищено ліміт запитів для цієї сесії. Спробуйте пізніше або зверніться до менеджера.")
+    st.stop()
+
+def make_filename(pib: str) -> str:
+    safe_pib = "_".join((pib or "Без_ПІБ").split())
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"Smart_Solutions_Заявка_Нова_{safe_pib}_{ts}.xlsx"
+
+
+with st.form("outstaffing_form"):
+    st.subheader("1. Загальні відомості про заявку")
+    col1, col2 = st.columns(2)
+    with col1:
+        city = st.text_input("Місто*", placeholder="м. Київ")
+        format_work = st.selectbox("Формат роботи*", ["Офіс", "Віддалено", "Гібрид"])
+        start_date = st.date_input("Дата прийому*", value=date.today())
+    with col2:
+        address = st.text_input("Адреса / місце роботи*", placeholder="вул. Хрещатик, 1")
+        term_std = st.text_input("Термін дії СТД / проєкту*", placeholder="напр. 31.12.2027 або до завершення Заявки")
+
+    st.subheader("2. Відомості про кандидата")
+    col3, col4 = st.columns(2)
+    with col3:
+        pib = st.text_input("П.І.Б. кандидата*", placeholder="Бондар Денис Миколайович")
+        ipn = st.text_input("ІПН (10 цифр)*", placeholder="1234567890")
+        phone = st.text_input("Номер телефону*", placeholder="+380991234567")
+    with col4:
+        email = st.text_input("E-mail кандидата*", placeholder="candidate@example.com")
+        iban = st.text_input("Реквізити картки / IBAN*", placeholder="UA123456789012345678901234567")
+
+    st.subheader("3. Умови праці та графік")
+    col5, col6 = st.columns(2)
+    with col5:
+        position = st.text_input("Посада згідно КП*", placeholder="Менеджер з продажів")
+        probation = st.text_input("Випробувальний термін", value="3 місяці")
+        work_type = st.selectbox("Тип роботи*", ["Повна зайнятість", "Часткова зайнятість"])
+        mat_resp = st.selectbox("Матеріальна відповідальність*", ["Ні", "Так"])
+    with col6:
+        schedule_hours = st.text_input("Графік роботи (з-по)*", value="09:00 - 18:00")
+        hours_count = st.text_input("Кількість годин на тиждень*", value="40")
+        vacation_days = st.text_input("Кількість днів відпустки*", value="24")
+
+    st.subheader("4. Оплата праці та компенсації")
+    col7, col8 = st.columns(2)
+    with col7:
+        gross_salary = st.text_input("Оклад гросс (грн)*", placeholder="30000")
+        bonus = st.text_input("Бонус", placeholder="10000")
+        bonus_period = st.selectbox("Періодичність бонуса", ["Щомісячно", "Щоквартально", "Щорічно", "Без бонуса"])
+    with col8:
+        advance_salary_date = st.text_input("Дата виплати авансу та ЗП*", value="15 та 30 числа")
+        other_comp = st.text_input("Інші компенсації", placeholder="Мобільний зв'язок, медогляд")
+
+    st.subheader("5. Функціональні обов'язки та примітки")
+    duties = st.text_area("Функціональні обов'язки*", placeholder="1. Проведення переговорів\n2. Підготовка звітів")
+    notes = st.text_area("Примітка / Вимоги до кандидатів", placeholder="Наявність водійського посвідчення категорії B")
+    comments = st.text_area("Коментарі")
+    documents = st.text_input("Необхідні документи", value="Паспорт, ІПН, Трудова книжка")
+
+    submitted = st.form_submit_button("Надіслати форму")
+
+if submitted:
+    st.session_state["submit_count"] += 1
+
+    # Початкова перевірка обов'язкових полів
+    validation_errors = []
+    if not pib.strip():
+        validation_errors.append("Поле П.І.Б. є обов'язковим.")
+
+    try:
+        norm_phone = normalize_phone(phone)
+    except ValueError as e:
+        validation_errors.append(str(e))
+
+    try:
+        norm_ipn = validate_ipn(ipn)
+    except ValueError as e:
+        validation_errors.append(str(e))
+
+    if iban.strip():
+        try:
+            norm_iban = validate_iban(iban)
+        except ValueError as e:
+            validation_errors.append(str(e))
+    else:
+        norm_iban = ""
+
+    if validation_errors:
+        for err in validation_errors:
+            st.error(err)
+    else:
+        # Формування словника даних для шаблону згідно з маппінгом TEMPLATE_HEADERS
+        location = ", ".join(part for part in [city.strip(), address.strip()] if part)
+        str_start_date = start_date.strftime("%d.%m.%Y") if isinstance(start_date, (date, datetime)) else str(start_date)
+
+        form_data = {
+            "П.І.Б.": pib.strip(),
+            "ІПН": norm_ipn,
+            "Дата прийома": str_start_date,
+            "Термін дії СТД": term_std.strip(),
+            "Посада згідно кп": position.strip(),
+            "Випробувальний термін": probation.strip(),
+            "Номер телефону": norm_phone,
+            "E-mail": email.strip(),
+            "Оклад гросс": gross_salary.strip(),
+            "Бонус": bonus.strip(),
+            "Періодичність бонуса": bonus_period,
+            "Робота": work_type,
+            "Дата виплата авансу та ЗП": advance_salary_date.strip(),
+            "Графік роботи (з-по)": schedule_hours.strip(),
+            "Графік роботи количество годин": hours_count.strip(),
+            "Кількість дней відпустки": vacation_days.strip(),
+            "Місто та місце роботи": location,
+            "Формат роботи": format_work,
+            "Матеріальна відповідальність": mat_resp,
+            "Інші компенсації": other_comp.strip(),
+            "Коментарі": comments.strip(),
+            "Реквізити картки": norm_iban,
+            "Функціональні обов'язки": duties.strip(),
+            "Примітка": notes.strip(),
+            "документи": documents.strip(),
+        }
+
+        try:
+            submission_id = f"SS-{datetime.now().strftime('%Y%m%d')}-{uuid4().hex[:4].upper()}"
+            filename = make_filename(pib)
+            template_file = "assets/client_template.xlsx"
+
+            file_bytes = build_workbook(template_file, form_data, route.get("client_template"))
+
+            # Виклик поштового модуля
+            ok = mailer.send_document_package(
+                file_bytes=file_bytes,
+                filename=filename,
+                to_addr=route["email"],
+                submission_id=submission_id,
+            )
+
+            if ok:
+                st.success(f"Форму успішно надіслано менеджеру! Номер звернення: {submission_id}")
+            else:
+                st.error(
+                    "Не вдалося автоматично надіслати файл поштою. "
+                    f"Будь ласка, завантажте файл та надішліть його вручну на адресу {route['email']}."
+                )
+                st.download_button(
+                    "Завантажити сформований Excel",
+                    data=file_bytes,
+                    file_name=filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+        except Exception as ex:
+            st.error("Під час обробки форми виникла технічна помилка. Будь ласка, зверніться до підтримки.")
