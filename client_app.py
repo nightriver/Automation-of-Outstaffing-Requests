@@ -39,14 +39,11 @@ st.markdown(
         font-family: 'Arial', sans-serif;
     }
 
-    /* Тривалість відображення st.toast() щонайменше 10 секунд */
+    /* Нативна стилізація блоків st.toast() з тривалістю 10 секунд */
     div[data-testid="stToast"] {
         border-radius: 8px !important;
         font-weight: 500 !important;
         box-shadow: 0 4px 14px rgba(0,0,0,0.15) !important;
-        background-color: #F8D7DA !important; /* Блідо-червоний для помилок */
-        color: #721C24 !important;
-        border: 1px solid #F5C6CB !important;
         animation: stToastHold 10s ease-in-out forwards !important;
     }
 
@@ -57,13 +54,32 @@ st.markdown(
         100% { opacity: 0; transform: translateY(-10px); }
     }
 
-    /* Блідо-зелений колір для успішного toast */
-    div[data-testid="stToast"]:has(div:contains("успішно")),
-    div[data-testid="stToast"]:has(span:contains("✅")) {
+    /* Приховуємо маркерні посилання */
+    div[data-testid="stToast"] a[href*="invalid"] {
+        display: none !important;
+    }
+
+    /* Блідо-червоний для помилок (посилання https://error.invalid) */
+    div[data-testid="stToast"]:has(a[href="https://error.invalid"]) {
+        background-color: #F8D7DA !important;
+        color: #721C24 !important;
+        border: 1px solid #F5C6CB !important;
+    }
+
+    /* Блідо-зелений колір для успішного toast (посилання https://success.invalid) */
+    div[data-testid="stToast"]:has(a[href="https://success.invalid"]) {
         background-color: #D4EDDA !important;
         color: #155724 !important;
         border: 1px solid #C3E6CB !important;
     }
+
+    /* Зробити колір плейсхолдерів світлішим */
+    input::placeholder, textarea::placeholder {
+        color: #A9A9A9 !important;
+        opacity: 0.85 !important;
+    }
+
+
 
     /* Картка/секції форми з сірим фоном #F3F3F3 та жовтим акцентним бордером #FFD100 */
     div[data-testid="stForm"] {
@@ -247,33 +263,33 @@ with st.form("outstaffing_form"):
     st.subheader("1. Загальні відомості про Замовника та заявку")
     col0a, col0b = st.columns(2)
     with col0a:
-        client_name_input = st.text_input("Назва компанії Замовника*", placeholder="ТОВ «ОБРІЙ - 2020»")
+        client_name_input = st.text_input("Назва компанії Замовника*", placeholder="")
     with col0b:
-        client_director_input = st.text_input("П.І.Б. Директора Замовника*", placeholder="Чекман П.С.")
+        client_director_input = st.text_input("П.І.Б. Директора Замовника*", placeholder="")
 
     col1, col2 = st.columns(2)
     with col1:
-        city = st.text_input("Місто*", placeholder="м. Київ")
+        city = st.text_input("Місто*", placeholder="")
         format_work = st.selectbox("Формат роботи*", ["Офіс", "Віддалено", "Гібрид"])
         start_date = st.date_input("Дата прийому*", value=date.today())
     with col2:
-        address = st.text_input("Адреса / місце роботи*", placeholder="вул. Хрещатик, 1")
+        address = st.text_input("Адреса / місце роботи*", placeholder="")
         term_std = st.text_input("Термін дії СТД / проєкту*", placeholder="напр. 31.12.2027 або до завершення Заявки")
 
     st.subheader("2. Відомості про кандидата")
     col3, col4 = st.columns(2)
     with col3:
-        pib = st.text_input("П.І.Б. кандидата*", placeholder="Бондар Денис Миколайович")
-        ipn = st.text_input("ІПН (10 цифр)*", placeholder="1234567890")
-        phone = st.text_input("Номер телефону*", placeholder="+380991234567")
+        pib = st.text_input("П.І.Б. кандидата*", placeholder="")
+        ipn = st.text_input("ІПН (10 цифр)*", placeholder="")
+        phone = st.text_input("Номер телефону*", placeholder="+380 XXX-XX-XX")
     with col4:
-        email = st.text_input("E-mail кандидата*", placeholder="candidate@example.com")
-        iban = st.text_input("Реквізити картки / IBAN", placeholder="UA123456789012345678901234567")
+        email = st.text_input("E-mail кандидата*", placeholder="")
+        iban = st.text_input("Реквізити картки / IBAN", placeholder="")
 
     st.subheader("3. Умови праці та графік")
     col5, col6 = st.columns(2)
     with col5:
-        position = st.text_input("Посада згідно КП*", placeholder="Менеджер з продажів")
+        position = st.text_input("Посада згідно КП*", placeholder="")
         probation = st.text_input("Випробувальний термін", value="3 місяці")
         work_type = st.selectbox("Тип роботи*", ["Повна зайнятість", "Часткова зайнятість"])
         mat_resp = st.selectbox("Матеріальна відповідальність*", ["Ні", "Так"])
@@ -285,8 +301,8 @@ with st.form("outstaffing_form"):
     st.subheader("4. Оплата праці та компенсації")
     col7, col8 = st.columns(2)
     with col7:
-        gross_salary = st.text_input("Оклад гросс (грн)*", placeholder="30000")
-        bonus = st.text_input("Бонус", placeholder="10000")
+        gross_salary = st.text_input("Оклад гросс (грн)*", placeholder="")
+        bonus = st.text_input("Бонус", placeholder="")
         bonus_period = st.selectbox("Періодичність бонуса", ["Щомісячно", "Щоквартально", "Щорічно", "Без бонуса"])
     with col8:
         advance_salary_date = st.text_input("Дата виплати авансу та ЗП*", value="15 та 30 числа")
@@ -381,7 +397,7 @@ if submitted:
 
     if validation_errors:
         for err in validation_errors:
-            st.toast(f"⚠️ {err}", icon="⚠️")
+            st.toast(f"⚠️ {err} [err](https://error.invalid)", icon="⚠️")
     else:
         st.session_state["field_errors"] = []
         try:
@@ -396,8 +412,8 @@ if submitted:
             )
 
             if ok:
-                st.toast(f"✅ Форму успішно надіслано менеджеру! [ID: {submission_id}]", icon="✅")
+                st.toast(f"✅ Форму успішно надіслано менеджеру! [ID: {submission_id}] [ok](https://success.invalid)", icon="✅")
             else:
-                st.toast("❌ Помилка надсилання поштою. Завантажте файл кнопкою нижче.", icon="❌")
+                st.toast("❌ Помилка надсилання поштою. Завантажте файл кнопкою нижче. [err](https://error.invalid)", icon="❌")
         except Exception as ex:
-            st.toast("❌ Під час обробки форми виникла технічна помилка.", icon="❌")
+            st.toast("❌ Під час обробки форми виникла технічна помилка. [err](https://error.invalid)", icon="❌")
