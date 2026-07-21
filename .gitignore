@@ -1,0 +1,21 @@
+# Streamlit Secrets (конфіденційні паролі та поштові ключі)
+.streamlit/secrets.toml
+
+# Клієнтські та тимчасові тестові Excel-файли
+*.xlsx
+!assets/client_template.xlsx
+
+# Python cache & virtual environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Іде та операційні файли
+.vscode/
+.idea/
+.DS_Store
